@@ -304,7 +304,13 @@ class _FyrFilesState extends State<FyrFiles> {
 
   Future<bool> isClipboardDataAvailable() async {
     ClipboardData? clipboardData = await Clipboard.getData('text/plain');
-    return clipboardData?.text?.isNotEmpty ?? false;
+    String? path = clipboardData?.text;
+
+    if (path != null && path.isNotEmpty) {
+      return FileSystemEntity.typeSync(path) != FileSystemEntityType.notFound;
+    }
+
+    return false;
   }
 
   String formatPath(String path) {
@@ -700,7 +706,7 @@ class _FyrFilesState extends State<FyrFiles> {
                           },
                           child: Material(
                             child: InkWell(
-                              onTap: () async {
+                              onDoubleTap: () async {
                                 if (isDir) {
                                   openDirectory(file as Directory);
                                 } else {
