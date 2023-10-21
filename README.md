@@ -1,6 +1,7 @@
 # fyrFiles
 
 ![fyrFiles screenshot](./screenshot.png)
+![fyrFiles screenshot](./android_screenshot.png)
 
 
 fyrFiles is a Linux/Android file manager written with Flutter/Dart. It is minimal but has the traditional functionality of copy/paste, creating new directories/files, viewing properties, and the ability to view hidden files by hitting Ctrl+H.
