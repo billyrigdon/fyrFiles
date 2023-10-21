@@ -10,50 +10,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import './types/file_info.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const FyrFilesApp());
 }
 
-Widget greenDot() {
+Widget getDotColor(Color color) {
   return Container(
     width: 10,
     height: 10,
     decoration: BoxDecoration(
-      color: Colors.green,
-      shape: BoxShape.circle,
-    ),
-  );
-}
-
-Widget blueDot() {
-  return Container(
-    width: 10,
-    height: 10,
-    decoration: BoxDecoration(
-      color: Colors.blue,
-      shape: BoxShape.circle,
-    ),
-  );
-}
-
-Widget purpleDot() {
-  return Container(
-    width: 10,
-    height: 10,
-    decoration: BoxDecoration(
-      color: Colors.deepPurple,
-      shape: BoxShape.circle,
-    ),
-  );
-}
-
-Widget greyDot() {
-  return Container(
-    width: 10,
-    height: 10,
-    decoration: BoxDecoration(
-      color: Colors.grey,
+      color: color,
       shape: BoxShape.circle,
     ),
   );
@@ -64,23 +32,23 @@ Widget getDotByTag(String tag) {
 
   switch (tag) {
     case 'purple':
-      return purpleDot();
+      return getDotColor(Colors.purple);
       break;
     case 'green':
-      return greenDot();
+      return getDotColor(Colors.green);
       break;
     case 'blue':
-      return blueDot();
+      return getDotColor(Colors.blue);
       break;
     default:
-      return greyDot();
+      return getDotColor(Colors.transparent);
       break;
   }
 }
 
 class FileInfo {
   final String filePath;
-  String? tag; // This could be 'red', 'blue', 'green', etc.
+  String? tag;
 
   FileInfo({required this.filePath, this.tag});
 
@@ -107,10 +75,10 @@ class FyrFilesApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       theme: ThemeData(
-        brightness: Brightness.light, // Light mode
+        brightness: Brightness.light,
       ),
       darkTheme: ThemeData(
-        brightness: Brightness.dark, // Dark mode
+        brightness: Brightness.dark,
       ),
       home: FyrFiles(),
     );
@@ -125,12 +93,8 @@ class FyrFiles extends StatefulWidget {
 }
 
 class _FyrFilesState extends State<FyrFiles> {
-  /* 
-    'late' is similar to declaring a variable with ! in typescript.
-    Means the value will be non-null at the time it's used
-  */
   late List<FileSystemEntity> files;
-  late Directory currentDir;
+  late Directory currentDir = Directory.current;
   FileSystemEntity? copiedEntity;
   bool isFileContextMenuShown = false;
   bool showHiddenFiles = false;
@@ -158,7 +122,6 @@ class _FyrFilesState extends State<FyrFiles> {
               .where((file) => !p.basename(file.path).startsWith('.'))
               .toList();
 
-      // Check if it's the first run or the list has changed.
       if (isFirstRun || !listEquals(previousFiles, filteredFiles)) {
         yield filteredFiles;
         previousFiles = filteredFiles;
@@ -169,22 +132,43 @@ class _FyrFilesState extends State<FyrFiles> {
     }
   }
 
-  // called after constructor, think useEffect/ngOnInit/onMounted
+  bool isAndroid() {
+    return Platform.isAndroid;
+  }
+
+  Future<Directory> getHomeDirectoryByPlatform() async {
+    if (isAndroid()) {
+      final directory = await getApplicationDocumentsDirectory();
+      return directory;
+    } else {
+      return Directory(Platform.environment['HOME'] ?? '/home/');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
-    final homeDirectory = Platform.environment['HOME'];
-    if (homeDirectory == null) {
-      return;
-    }
-    tagsFilePath = '$homeDirectory/.fyr/files/tags.json';
-    checkAndCreateFile();
-    readTagsFromFile(tagsFilePath).then((loadedFileInfo) {
+
+    getHomeDirectoryByPlatform().then((Directory dir) async {
       setState(() {
-        fileInfoList = loadedFileInfo;
-        currentDir = Directory.current;
-        files = currentDir.listSync();
+        currentDir = dir;
+        tagsFilePath = p.join(currentDir.path, '.fyr/files/tags.json');
       });
+
+      try {
+        await checkAndCreateFile();
+        final loadedFileInfo = await readTagsFromFile(tagsFilePath);
+        setState(() {
+          fileInfoList = loadedFileInfo;
+          files = currentDir.listSync();
+        });
+      } catch (err) {
+        print(err);
+        setState(() {
+          fileInfoList = [];
+          files = currentDir.listSync();
+        });
+      }
     });
   }
 
@@ -202,6 +186,16 @@ class _FyrFilesState extends State<FyrFiles> {
       return '${dir.path.split('/').last} > ';
     } else {
       return dir.path.split('/').last;
+    }
+  }
+
+  double getToolbarPadding() {
+    if (Platform.isAndroid) {
+      return 42.0;
+    } else if (Platform.isLinux) {
+      return 0.0;
+    } else {
+      return 0.0;
     }
   }
 
@@ -237,20 +231,16 @@ class _FyrFilesState extends State<FyrFiles> {
 
   Future<void> checkAndCreateFile() async {
     try {
-      // Get the home directory path from the 'HOME' environment variable
-
       final file = File(tagsFilePath);
+      final dir = await file.parent.create(recursive: true);
 
-      // Check if the file exists
       if (await file.exists()) {
         print("File exists.");
       } else {
         print("File does not exist. Creating file.");
 
-        // Initialize with empty data or whatever your initial state should be
         Map<String, List<String>> initialData = {};
 
-        // Write to the file
         await file.writeAsString(jsonEncode(initialData));
       }
     } catch (e) {
@@ -259,8 +249,6 @@ class _FyrFilesState extends State<FyrFiles> {
   }
 
   void openDirectory(Directory directory) {
-    print(directory);
-    // setState notifies framework that variables have changed
     setState(() {
       selectedTag = null;
       currentDir = directory;
@@ -295,7 +283,6 @@ class _FyrFilesState extends State<FyrFiles> {
       }
       dir = dir?.parent;
     }
-    // Add the root directory
     if (dir != null && dir.path == dir.parent.path) {
       parents.add(dir);
     }
@@ -327,7 +314,7 @@ class _FyrFilesState extends State<FyrFiles> {
         File sourceFile = File(path);
         String fileName = sourceFile.uri.pathSegments.last;
         await sourceFile.copy('${targetDir.path}/$fileName');
-        setState(() {}); // trigger a rebuild
+        setState(() {});
       }
     } catch (err) {
       print(err);
@@ -381,7 +368,6 @@ class _FyrFilesState extends State<FyrFiles> {
     );
   }
 
-  // Template for UI
   @override
   Widget build(BuildContext context) {
     double width = MediaQuery.of(context).size.width;
@@ -389,20 +375,17 @@ class _FyrFilesState extends State<FyrFiles> {
 
     return RawKeyboardListener(
       focusNode: FocusNode(),
-      autofocus: true, // To ensure it gets focus
+      autofocus: true,
       onKey: (event) {
         if (event is RawKeyDownEvent) {
           if (event.logicalKey == LogicalKeyboardKey.controlLeft ||
               event.logicalKey == LogicalKeyboardKey.controlRight) {
-            // Control key is down
-            // You can listen for other keys here if needed
           } else if (event.logicalKey == LogicalKeyboardKey.keyH &&
               event.isControlPressed) {
-            // Ctrl + H is pressed
             setState(() {
               showHiddenFiles = !showHiddenFiles;
               if (selectedTag == null) {
-                openDirectory(currentDir); // Refresh the directory
+                openDirectory(currentDir);
               }
             });
           }
@@ -423,71 +406,75 @@ class _FyrFilesState extends State<FyrFiles> {
                       openDirectory(currentDir.parent);
                     }
                   },
-
-                  //onPressed: () {
-                  //  openDirectory(currentDir.parent);
-                  //},
                   iconSize: 24.0,
                 )
               : null,
           backgroundColor: Colors.transparent,
-          flexibleSpace: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Row(
-                children: [
-                  SizedBox(width: 75),
-                  IconButton(
-                    icon: Icon(Icons.circle, color: Colors.purple),
-                    onPressed: () {
-                      setState(() {
-                        selectedTag = 'purple';
-                      });
-                    },
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.circle, color: Colors.green),
-                    onPressed: () {
-                      setState(() {
-                        selectedTag = 'green';
-                      });
-                    },
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.circle, color: Colors.blue),
-                    onPressed: () {
-                      setState(() {
-                        selectedTag = 'blue';
-                      });
-                    },
-                  ),
-                ],
-              ),
-              Align(
-                alignment: Alignment.center,
-                child: RichText(
-                  text: TextSpan(
-                    children: getParentDirectories(currentDir).map((dir) {
-                      return TextSpan(
-                        text: displayText(dir, currentDir, selectedTag != null),
-                        style: TextStyle(
-                          color: MediaQuery.of(context).platformBrightness ==
-                                  Brightness.dark
-                              ? Colors.white
-                              : Colors.black,
-                        ),
-                        recognizer: TapGestureRecognizer()
-                          ..onTap = () {
-                            selectedTag = null;
-                            openDirectory(dir);
-                          },
-                      );
-                    }).toList(),
+          flexibleSpace: Padding(
+            padding: EdgeInsets.only(top: getToolbarPadding()),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(width: 75),
+                    IconButton(
+                      icon: Icon(Icons.circle, color: Colors.purple),
+                      onPressed: () {
+                        setState(() {
+                          selectedTag = 'purple';
+                        });
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.circle, color: Colors.green),
+                      onPressed: () {
+                        setState(() {
+                          selectedTag = 'green';
+                        });
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.circle, color: Colors.blue),
+                      onPressed: () {
+                        setState(() {
+                          selectedTag = 'blue';
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: EdgeInsets.only(top: 8.0, right: 75.0),
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: RichText(
+                      text: TextSpan(
+                        children: getParentDirectories(currentDir).map((dir) {
+                          return TextSpan(
+                            text: displayText(
+                                dir, currentDir, selectedTag != null),
+                            style: TextStyle(
+                              color:
+                                  MediaQuery.of(context).platformBrightness ==
+                                          Brightness.dark
+                                      ? Colors.white
+                                      : Colors.black,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                selectedTag = null;
+                                openDirectory(dir);
+                              },
+                          );
+                        }).toList(),
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         body: StreamBuilder<List<FileSystemEntity>>(
@@ -509,245 +496,487 @@ class _FyrFilesState extends State<FyrFiles> {
                         (info) => info.filePath == file.path,
                         orElse: () => FileInfo(filePath: file.path),
                       );
-                      return Listener(
-                          onPointerDown: (PointerDownEvent event) {
-                            if (event.kind == PointerDeviceKind.mouse &&
-                                event.buttons == kSecondaryMouseButton) {
-                              isFileContextMenuShown = true;
-                              showMenu(
-                                context: context,
-                                position: RelativeRect.fromLTRB(
-                                    event.position.dx,
-                                    event.position.dy,
-                                    event.position.dx,
-                                    event.position.dy),
-                                items: [
-                                  PopupMenuItem(
-                                    child: ListTile(
-                                      leading: Icon(Icons.copy),
-                                      title: Text('Copy'),
-                                      onTap: () {
-                                        Clipboard.setData(
-                                            ClipboardData(text: file.path));
-                                        Navigator.pop(context);
-                                      },
+
+                      return isAndroid()
+                          ? GestureDetector(
+                              onLongPressStart: (LongPressStartDetails event) {
+                                isFileContextMenuShown = true;
+                                showMenu(
+                                  context: context,
+                                  position: RelativeRect.fromLTRB(
+                                      event.globalPosition.dx,
+                                      event.globalPosition.dy,
+                                      event.globalPosition.dx,
+                                      event.globalPosition.dy),
+                                  items: [
+                                    PopupMenuItem(
+                                      child: ListTile(
+                                        leading: Icon(Icons.copy),
+                                        title: Text('Copy'),
+                                        onTap: () {
+                                          Clipboard.setData(
+                                              ClipboardData(text: file.path));
+                                          Navigator.pop(context);
+                                        },
+                                      ),
                                     ),
-                                  ),
-                                  PopupMenuItem(
-                                    child: ListTile(
-                                      leading: Icon(Icons.edit),
-                                      title: Text('Rename'),
-                                      onTap: () async {
-                                        Navigator.pop(context);
-                                        TextEditingController renameController =
-                                            TextEditingController(
-                                                text:
-                                                    file.uri.pathSegments.last);
-                                        await showDialog(
-                                          context: context,
-                                          builder: (context) => AlertDialog(
-                                            title: Text('Rename File'),
-                                            content: TextField(
-                                              controller: renameController,
+                                    PopupMenuItem(
+                                      child: ListTile(
+                                        leading: Icon(Icons.edit),
+                                        title: Text('Rename'),
+                                        onTap: () async {
+                                          Navigator.pop(context);
+                                          TextEditingController
+                                              renameController =
+                                              TextEditingController(
+                                                  text: file
+                                                      .uri.pathSegments.last);
+                                          await showDialog(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              title: Text('Rename File'),
+                                              content: TextField(
+                                                controller: renameController,
+                                              ),
+                                              actions: [
+                                                ElevatedButton(
+                                                  onPressed: () {
+                                                    Navigator.pop(context);
+                                                  },
+                                                  child: Text('Cancel'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () {
+                                                    String newName =
+                                                        renameController.text;
+                                                    String newPath = p.join(
+                                                        p.dirname(file.path),
+                                                        newName);
+                                                    file.renameSync(newPath);
+                                                    Navigator.pop(context);
+                                                  },
+                                                  child: Text('Rename'),
+                                                ),
+                                              ],
                                             ),
-                                            actions: [
-                                              ElevatedButton(
-                                                onPressed: () {
-                                                  Navigator.pop(context);
-                                                },
-                                                child: Text('Cancel'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () {
-                                                  String newName =
-                                                      renameController.text;
-                                                  String newPath = p.join(
-                                                      p.dirname(file.path),
-                                                      newName);
-                                                  file.renameSync(newPath);
-                                                  Navigator.pop(context);
-                                                },
-                                                child: Text('Rename'),
-                                              ),
-                                            ],
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      child: ListTile(
+                                        leading: Icon(Icons.delete),
+                                        title: Text('Delete'),
+                                        onTap: () {
+                                          file.deleteSync();
+                                          Navigator.pop(context);
+                                        },
+                                      ),
+                                    ),
+                                    PopupMenuItem(
+                                      child: Column(
+                                        children: [
+                                          ListTile(
+                                            leading: Icon(Icons.info),
+                                            title: Text('Properties'),
+                                            onTap: () {
+                                              Navigator.pop(context);
+                                              var fileStat = file.statSync();
+                                              var properties = fileStatToMap(
+                                                  fileStat, file.path);
+                                              showPropertiesDialog(
+                                                  context, properties);
+                                            },
                                           ),
-                                        );
-                                      },
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  PopupMenuItem(
-                                    child: ListTile(
-                                      leading: Icon(Icons.delete),
-                                      title: Text('Delete'),
-                                      onTap: () {
-                                        // Deleting the file
-                                        file.deleteSync();
-                                        Navigator.pop(context);
-                                      },
-                                    ),
-                                  ),
-                                  PopupMenuItem(
-                                    child: Column(
-                                      children: [
-                                        ListTile(
-                                          leading: Icon(Icons.info),
-                                          title: Text('Properties'),
-                                          onTap: () {
+                                    PopupMenuItem(
+                                      child: GestureDetector(
+                                          onTap: () async {
+                                            FileInfo currentFileInfo =
+                                                fileInfoList.firstWhere(
+                                              (info) =>
+                                                  info.filePath == file.path,
+                                              orElse: () =>
+                                                  FileInfo(filePath: file.path),
+                                            );
+
+                                            currentFileInfo.tag = 'purple';
+
+                                            fileInfoList.removeWhere((info) =>
+                                                info.filePath == file.path);
+
+                                            fileInfoList.add(currentFileInfo);
+
+                                            await writeTagsToFile(
+                                                fileInfoList, tagsFilePath);
+
                                             Navigator.pop(context);
-                                            var fileStat = file.statSync();
-                                            var properties = fileStatToMap(
-                                                fileStat, file.path);
-                                            showPropertiesDialog(
-                                                context, properties);
                                           },
-                                        ),
-                                      ], //PopupMenuItem children
-                                    ), // Column
-                                  ), //PopupMenuItem
-
-                                  PopupMenuItem(
-                                    child: GestureDetector(
-                                        onTap: () async {
-                                          FileInfo currentFileInfo =
-                                              fileInfoList.firstWhere(
-                                            (info) =>
-                                                info.filePath == file.path,
-                                            orElse: () =>
-                                                FileInfo(filePath: file.path),
-                                          );
-
-                                          currentFileInfo.tag = 'purple';
-
-                                          fileInfoList.removeWhere((info) =>
-                                              info.filePath == file.path);
-
-                                          fileInfoList.add(currentFileInfo);
-
-                                          await writeTagsToFile(
-                                              fileInfoList, tagsFilePath);
-
-                                          Navigator.pop(context);
-                                        },
-                                        child: Row(
-                                          children: [
-                                            purpleDot(),
-                                            SizedBox(width: 8),
-                                            Text("Creativity"),
-                                          ],
-                                        )),
-                                  ), // Color PopupMenuItem
-
-                                  PopupMenuItem(
-                                    child: GestureDetector(
-                                        onTap: () async {
-                                          FileInfo currentFileInfo =
-                                              fileInfoList.firstWhere(
-                                            (info) =>
-                                                info.filePath == file.path,
-                                            orElse: () =>
-                                                FileInfo(filePath: file.path),
-                                          );
-
-                                          currentFileInfo.tag = 'green';
-
-                                          fileInfoList.removeWhere((info) =>
-                                              info.filePath == file.path);
-
-                                          fileInfoList.add(currentFileInfo);
-
-                                          await writeTagsToFile(
-                                              fileInfoList, tagsFilePath);
-
-                                          Navigator.pop(context);
-                                        },
-                                        child: Row(
-                                          children: [
-                                            greenDot(),
-                                            SizedBox(width: 8),
-                                            Text("Important"),
-                                          ],
-                                        )),
-                                  ), // Color PopupMenuItem
-
-                                  PopupMenuItem(
-                                    child: GestureDetector(
-                                        onTap: () async {
-                                          FileInfo currentFileInfo =
-                                              fileInfoList.firstWhere(
-                                            (info) =>
-                                                info.filePath == file.path,
-                                            orElse: () =>
-                                                FileInfo(filePath: file.path),
-                                          );
-
-                                          currentFileInfo.tag = 'blue';
-
-                                          fileInfoList.removeWhere((info) =>
-                                              info.filePath == file.path);
-
-                                          fileInfoList.add(currentFileInfo);
-
-                                          await writeTagsToFile(
-                                              fileInfoList, tagsFilePath);
-
-                                          Navigator.pop(context);
-                                        },
-                                        child: Row(
-                                          children: [
-                                            blueDot(),
-                                            SizedBox(width: 8),
-                                            Text("Development"),
-                                          ],
-                                        )),
-                                  ), // Color PopupMenuItem
-                                ],
-                              ).then((value) => isFileContextMenuShown = false);
-                            }
-                          },
-                          child: Material(
-                            child: InkWell(
-                              onDoubleTap: () async {
-                                if (isDir) {
-                                  openDirectory(file as Directory);
-                                } else {
-                                  var filePath = file.path;
-                                  var result =
-                                      await Process.run('xdg-open', [filePath]);
-                                  if (result.exitCode != 0) {
-                                    print(
-                                        'Could not open $filePath: ${result.stderr}');
-                                  }
-                                }
-                              },
-                              child:
-                                  Stack(alignment: Alignment.center, children: [
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      isDir ? Icons.folder : Icons.file_copy,
-                                      size: 48.0,
-                                      color: Colors.deepPurple,
+                                          child: Row(
+                                            children: [
+                                              getDotColor(Colors.purple),
+                                              SizedBox(width: 8),
+                                              Text("Creativity"),
+                                            ],
+                                          )),
                                     ),
-                                    Text(
-                                      isDir
-                                          ? file.path.split('/').last
-                                          : file.uri.pathSegments.last,
-                                      textAlign: TextAlign.center,
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
+                                    PopupMenuItem(
+                                      child: GestureDetector(
+                                          onTap: () async {
+                                            FileInfo currentFileInfo =
+                                                fileInfoList.firstWhere(
+                                              (info) =>
+                                                  info.filePath == file.path,
+                                              orElse: () =>
+                                                  FileInfo(filePath: file.path),
+                                            );
+
+                                            currentFileInfo.tag = 'green';
+
+                                            fileInfoList.removeWhere((info) =>
+                                                info.filePath == file.path);
+
+                                            fileInfoList.add(currentFileInfo);
+
+                                            await writeTagsToFile(
+                                                fileInfoList, tagsFilePath);
+
+                                            Navigator.pop(context);
+                                          },
+                                          child: Row(
+                                            children: [
+                                              getDotColor(Colors.green),
+                                              SizedBox(width: 8),
+                                              Text("Important"),
+                                            ],
+                                          )),
+                                    ),
+                                    PopupMenuItem(
+                                      child: GestureDetector(
+                                          onTap: () async {
+                                            FileInfo currentFileInfo =
+                                                fileInfoList.firstWhere(
+                                              (info) =>
+                                                  info.filePath == file.path,
+                                              orElse: () =>
+                                                  FileInfo(filePath: file.path),
+                                            );
+
+                                            currentFileInfo.tag = 'blue';
+
+                                            fileInfoList.removeWhere((info) =>
+                                                info.filePath == file.path);
+
+                                            fileInfoList.add(currentFileInfo);
+
+                                            await writeTagsToFile(
+                                                fileInfoList, tagsFilePath);
+
+                                            Navigator.pop(context);
+                                          },
+                                          child: Row(
+                                            children: [
+                                              getDotColor(Colors.blue),
+                                              SizedBox(width: 8),
+                                              Text("Development"),
+                                            ],
+                                          )),
                                     ),
                                   ],
+                                ).then(
+                                    (value) => isFileContextMenuShown = false);
+                              },
+                              child: Material(
+                                child: InkWell(
+                                  onDoubleTap: () async {
+                                    if (isDir) {
+                                      openDirectory(file as Directory);
+                                    } else {
+                                      var filePath = file.path;
+                                      var result = await Process.run(
+                                          'xdg-open', [filePath]);
+                                      if (result.exitCode != 0) {
+                                        print(
+                                            'Could not open $filePath: ${result.stderr}');
+                                      }
+                                    }
+                                  },
+                                  child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              isDir
+                                                  ? Icons.folder
+                                                  : Icons.file_copy,
+                                              size: 48.0,
+                                              color: Colors.deepPurple,
+                                            ),
+                                            Text(
+                                              isDir
+                                                  ? file.path.split('/').last
+                                                  : file.uri.pathSegments.last,
+                                              textAlign: TextAlign.center,
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                          ],
+                                        ),
+                                        if (currentFileInfo?.tag != null)
+                                          Positioned(
+                                              top: 24,
+                                              left: 24,
+                                              child: getDotByTag(
+                                                  currentFileInfo!.tag!)),
+                                      ]),
                                 ),
-                                if (currentFileInfo?.tag != null)
-                                  Positioned(
-                                      top: 24,
-                                      left: 24,
-                                      child:
-                                          getDotByTag(currentFileInfo!.tag!)),
-                              ]),
-                            ),
-                          ));
+                              ))
+                          : Listener(
+                              onPointerDown: (PointerDownEvent event) {
+                                if (event.kind == PointerDeviceKind.mouse &&
+                                    event.buttons == kSecondaryMouseButton) {
+                                  isFileContextMenuShown = true;
+                                  showMenu(
+                                    context: context,
+                                    position: RelativeRect.fromLTRB(
+                                        event.position.dx,
+                                        event.position.dy,
+                                        event.position.dx,
+                                        event.position.dy),
+                                    items: [
+                                      PopupMenuItem(
+                                        child: ListTile(
+                                          leading: Icon(Icons.copy),
+                                          title: Text('Copy'),
+                                          onTap: () {
+                                            Clipboard.setData(
+                                                ClipboardData(text: file.path));
+                                            Navigator.pop(context);
+                                          },
+                                        ),
+                                      ),
+                                      PopupMenuItem(
+                                        child: ListTile(
+                                          leading: Icon(Icons.edit),
+                                          title: Text('Rename'),
+                                          onTap: () async {
+                                            Navigator.pop(context);
+                                            TextEditingController
+                                                renameController =
+                                                TextEditingController(
+                                                    text: file
+                                                        .uri.pathSegments.last);
+                                            await showDialog(
+                                              context: context,
+                                              builder: (context) => AlertDialog(
+                                                title: Text('Rename File'),
+                                                content: TextField(
+                                                  controller: renameController,
+                                                ),
+                                                actions: [
+                                                  ElevatedButton(
+                                                    onPressed: () {
+                                                      Navigator.pop(context);
+                                                    },
+                                                    child: Text('Cancel'),
+                                                  ),
+                                                  ElevatedButton(
+                                                    onPressed: () {
+                                                      String newName =
+                                                          renameController.text;
+                                                      String newPath = p.join(
+                                                          p.dirname(file.path),
+                                                          newName);
+                                                      file.renameSync(newPath);
+                                                      Navigator.pop(context);
+                                                    },
+                                                    child: Text('Rename'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      PopupMenuItem(
+                                        child: ListTile(
+                                          leading: Icon(Icons.delete),
+                                          title: Text('Delete'),
+                                          onTap: () {
+                                            file.deleteSync();
+                                            Navigator.pop(context);
+                                          },
+                                        ),
+                                      ),
+                                      PopupMenuItem(
+                                        child: Column(
+                                          children: [
+                                            ListTile(
+                                              leading: Icon(Icons.info),
+                                              title: Text('Properties'),
+                                              onTap: () {
+                                                Navigator.pop(context);
+                                                var fileStat = file.statSync();
+                                                var properties = fileStatToMap(
+                                                    fileStat, file.path);
+                                                showPropertiesDialog(
+                                                    context, properties);
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem(
+                                        child: GestureDetector(
+                                            onTap: () async {
+                                              FileInfo currentFileInfo =
+                                                  fileInfoList.firstWhere(
+                                                (info) =>
+                                                    info.filePath == file.path,
+                                                orElse: () => FileInfo(
+                                                    filePath: file.path),
+                                              );
+
+                                              currentFileInfo.tag = 'purple';
+
+                                              fileInfoList.removeWhere((info) =>
+                                                  info.filePath == file.path);
+
+                                              fileInfoList.add(currentFileInfo);
+
+                                              await writeTagsToFile(
+                                                  fileInfoList, tagsFilePath);
+
+                                              Navigator.pop(context);
+                                            },
+                                            child: Row(
+                                              children: [
+                                                getDotColor(Colors.purple),
+                                                SizedBox(width: 8),
+                                                Text("Creativity"),
+                                              ],
+                                            )),
+                                      ),
+                                      PopupMenuItem(
+                                        child: GestureDetector(
+                                            onTap: () async {
+                                              FileInfo currentFileInfo =
+                                                  fileInfoList.firstWhere(
+                                                (info) =>
+                                                    info.filePath == file.path,
+                                                orElse: () => FileInfo(
+                                                    filePath: file.path),
+                                              );
+
+                                              currentFileInfo.tag = 'green';
+
+                                              fileInfoList.removeWhere((info) =>
+                                                  info.filePath == file.path);
+
+                                              fileInfoList.add(currentFileInfo);
+
+                                              await writeTagsToFile(
+                                                  fileInfoList, tagsFilePath);
+
+                                              Navigator.pop(context);
+                                            },
+                                            child: Row(
+                                              children: [
+                                                getDotColor(Colors.green),
+                                                SizedBox(width: 8),
+                                                Text("Important"),
+                                              ],
+                                            )),
+                                      ),
+                                      PopupMenuItem(
+                                        child: GestureDetector(
+                                            onTap: () async {
+                                              FileInfo currentFileInfo =
+                                                  fileInfoList.firstWhere(
+                                                (info) =>
+                                                    info.filePath == file.path,
+                                                orElse: () => FileInfo(
+                                                    filePath: file.path),
+                                              );
+
+                                              currentFileInfo.tag = 'blue';
+
+                                              fileInfoList.removeWhere((info) =>
+                                                  info.filePath == file.path);
+
+                                              fileInfoList.add(currentFileInfo);
+
+                                              await writeTagsToFile(
+                                                  fileInfoList, tagsFilePath);
+
+                                              Navigator.pop(context);
+                                            },
+                                            child: Row(
+                                              children: [
+                                                getDotColor(Colors.blue),
+                                                SizedBox(width: 8),
+                                                Text("Development"),
+                                              ],
+                                            )),
+                                      ),
+                                    ],
+                                  ).then((value) =>
+                                      isFileContextMenuShown = false);
+                                }
+                              },
+                              child: Material(
+                                child: InkWell(
+                                  onDoubleTap: () async {
+                                    if (isDir) {
+                                      openDirectory(file as Directory);
+                                    } else {
+                                      var filePath = file.path;
+                                      var result = await Process.run(
+                                          'xdg-open', [filePath]);
+                                      if (result.exitCode != 0) {
+                                        print(
+                                            'Could not open $filePath: ${result.stderr}');
+                                      }
+                                    }
+                                  },
+                                  child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              isDir
+                                                  ? Icons.folder
+                                                  : Icons.file_copy,
+                                              size: 48.0,
+                                              color: Colors.deepPurple,
+                                            ),
+                                            Text(
+                                              isDir
+                                                  ? file.path.split('/').last
+                                                  : file.uri.pathSegments.last,
+                                              textAlign: TextAlign.center,
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                          ],
+                                        ),
+                                        if (currentFileInfo?.tag != null)
+                                          Positioned(
+                                              top: 24,
+                                              left: 24,
+                                              child: getDotByTag(
+                                                  currentFileInfo!.tag!)),
+                                      ]),
+                                ),
+                              ));
                     },
                   ),
                   GestureDetector(
@@ -768,8 +997,7 @@ class _FyrFilesState extends State<FyrFiles> {
                                 leading: Icon(Icons.create),
                                 title: Text('Create File'),
                                 onTap: () {
-                                  Navigator.pop(
-                                      context); // Close the context menu
+                                  Navigator.pop(context);
                                   showDialog(
                                     context: context,
                                     builder: (context) {
@@ -811,8 +1039,7 @@ class _FyrFilesState extends State<FyrFiles> {
                                 leading: Icon(Icons.create),
                                 title: Text('Create Directory'),
                                 onTap: () {
-                                  Navigator.pop(
-                                      context); // Close the context menu
+                                  Navigator.pop(context);
                                   showDialog(
                                     context: context,
                                     builder: (context) {
@@ -856,8 +1083,7 @@ class _FyrFilesState extends State<FyrFiles> {
                                 title: Text('Paste'),
                                 onTap: () async {
                                   await pasteFile(currentDir);
-                                  Navigator.pop(
-                                      context); // Close the context menu
+                                  Navigator.pop(context);
                                 },
                               ),
                             ),
@@ -866,8 +1092,130 @@ class _FyrFilesState extends State<FyrFiles> {
                                 leading: Icon(Icons.info),
                                 title: Text('Properties'),
                                 onTap: () {
-                                  Navigator.pop(
-                                      context); // Close the context menu
+                                  Navigator.pop(context);
+                                  var dirStat = currentDir.statSync();
+                                  var properties =
+                                      dirStatToMap(dirStat, currentDir.path);
+                                  showPropertiesDialog(context, properties);
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                    },
+                    onLongPressStart: (LongPressStartDetails details) async {
+                      if (!isFileContextMenuShown) {
+                        showMenu(
+                          context: context,
+                          position: RelativeRect.fromLTRB(
+                            details.globalPosition.dx,
+                            details.globalPosition.dy,
+                            details.globalPosition.dx,
+                            details.globalPosition.dy,
+                          ),
+                          items: [
+                            PopupMenuItem(
+                              child: ListTile(
+                                leading: Icon(Icons.create),
+                                title: Text('Create File'),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) {
+                                      TextEditingController fileNameController =
+                                          TextEditingController();
+                                      return AlertDialog(
+                                        title: Text('Enter File Name'),
+                                        content: TextField(
+                                          controller: fileNameController,
+                                          decoration: InputDecoration(
+                                              hintText: "File name"),
+                                        ),
+                                        actions: <Widget>[
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            child: Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () async {
+                                              if (fileNameController
+                                                  .text.isNotEmpty) {
+                                                await createFile(currentDir,
+                                                    fileNameController.text);
+                                                Navigator.pop(context);
+                                              }
+                                            },
+                                            child: Text('Create'),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                            PopupMenuItem(
+                              child: ListTile(
+                                leading: Icon(Icons.create),
+                                title: Text('Create Directory'),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) {
+                                      TextEditingController dirNameController =
+                                          TextEditingController();
+                                      return AlertDialog(
+                                        title: Text('Enter Directory Name'),
+                                        content: TextField(
+                                          controller: dirNameController,
+                                          decoration: InputDecoration(
+                                              hintText: "Directory name"),
+                                        ),
+                                        actions: <Widget>[
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context),
+                                            child: Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () async {
+                                              if (dirNameController
+                                                  .text.isNotEmpty) {
+                                                await createDir(currentDir,
+                                                    dirNameController.text);
+                                                Navigator.pop(context);
+                                              }
+                                            },
+                                            child: Text('Create'),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                            PopupMenuItem(
+                              enabled: await isClipboardDataAvailable(),
+                              child: ListTile(
+                                leading: Icon(Icons.paste),
+                                title: Text('Paste'),
+                                onTap: () async {
+                                  await pasteFile(currentDir);
+                                  Navigator.pop(context);
+                                },
+                              ),
+                            ),
+                            PopupMenuItem(
+                              child: ListTile(
+                                leading: Icon(Icons.info),
+                                title: Text('Properties'),
+                                onTap: () {
+                                  Navigator.pop(context);
                                   var dirStat = currentDir.statSync();
                                   var properties =
                                       dirStatToMap(dirStat, currentDir.path);
