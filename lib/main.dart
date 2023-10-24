@@ -9,7 +9,6 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import './types/file_info.dart';
 import 'package:path_provider/path_provider.dart';
 
 void main() {
@@ -28,21 +27,15 @@ Widget getDotColor(Color color) {
 }
 
 Widget getDotByTag(String tag) {
-  Color dotColor;
-
   switch (tag) {
     case 'purple':
       return getDotColor(Colors.purple);
-      break;
     case 'green':
       return getDotColor(Colors.green);
-      break;
     case 'blue':
       return getDotColor(Colors.blue);
-      break;
     default:
       return getDotColor(Colors.transparent);
-      break;
   }
 }
 
@@ -80,7 +73,7 @@ class FyrFilesApp extends StatelessWidget {
       darkTheme: ThemeData(
         brightness: Brightness.dark,
       ),
-      home: FyrFiles(),
+      home: const FyrFiles(),
     );
   }
 }
@@ -128,7 +121,7 @@ class _FyrFilesState extends State<FyrFiles> {
         isFirstRun = false;
       }
 
-      await Future.delayed(Duration(seconds: 1));
+      await Future.delayed(const Duration(seconds: 1));
     }
   }
 
@@ -232,7 +225,7 @@ class _FyrFilesState extends State<FyrFiles> {
   Future<void> checkAndCreateFile() async {
     try {
       final file = File(tagsFilePath);
-      final dir = await file.parent.create(recursive: true);
+      await file.parent.create(recursive: true);
 
       if (await file.exists()) {
         print("File exists.");
@@ -346,7 +339,7 @@ class _FyrFilesState extends State<FyrFiles> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text("File Properties"),
+          title: const Text("File Properties"),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,7 +353,7 @@ class _FyrFilesState extends State<FyrFiles> {
               onPressed: () {
                 Navigator.pop(context);
               },
-              child: Text("Close"),
+              child: const Text("Close"),
             ),
           ],
         );
@@ -418,9 +411,9 @@ class _FyrFilesState extends State<FyrFiles> {
               children: [
                 Row(
                   children: [
-                    SizedBox(width: 75),
+                    const SizedBox(width: 75),
                     IconButton(
-                      icon: Icon(Icons.circle, color: Colors.purple),
+                      icon: const Icon(Icons.circle, color: Colors.purple),
                       onPressed: () {
                         setState(() {
                           selectedTag = 'purple';
@@ -428,7 +421,7 @@ class _FyrFilesState extends State<FyrFiles> {
                       },
                     ),
                     IconButton(
-                      icon: Icon(Icons.circle, color: Colors.green),
+                      icon: const Icon(Icons.circle, color: Colors.green),
                       onPressed: () {
                         setState(() {
                           selectedTag = 'green';
@@ -436,7 +429,7 @@ class _FyrFilesState extends State<FyrFiles> {
                       },
                     ),
                     IconButton(
-                      icon: Icon(Icons.circle, color: Colors.blue),
+                      icon: const Icon(Icons.circle, color: Colors.blue),
                       onPressed: () {
                         setState(() {
                           selectedTag = 'blue';
@@ -446,7 +439,7 @@ class _FyrFilesState extends State<FyrFiles> {
                   ],
                 ),
                 Padding(
-                  padding: EdgeInsets.only(top: 8.0, right: 75.0),
+                  padding: const EdgeInsets.only(top: 8.0, right: 75.0),
                   child: Align(
                     alignment: Alignment.center,
                     child: RichText(
@@ -482,213 +475,29 @@ class _FyrFilesState extends State<FyrFiles> {
           builder: (context, snapshot) {
             if (snapshot.hasData) {
               files = snapshot.data as List<FileSystemEntity>;
-              return Stack(
-                children: [
-                  GridView.builder(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: (width / 120).floor()),
-                    itemCount: files.length,
-                    itemBuilder: (context, index) {
-                      var file = files[index];
-                      var isDir = FileSystemEntity.isDirectorySync(file.path);
+              return GestureDetector(
+                onLongPressStart: (LongPressStartDetails details) async {
+                  // if (!isFileContextMenuShown) {
+                  await openBodyContextMenu(context, details);
+                  // }
+                },
+                child: Stack(
+                  children: [
+                    GridView.builder(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: (width / 120).floor()),
+                      itemCount: files.length,
+                      itemBuilder: (context, index) {
+                        var file = files[index];
+                        var isDir = FileSystemEntity.isDirectorySync(file.path);
 
-                      FileInfo? currentFileInfo = fileInfoList.firstWhere(
-                        (info) => info.filePath == file.path,
-                        orElse: () => FileInfo(filePath: file.path),
-                      );
+                        FileInfo? currentFileInfo = fileInfoList.firstWhere(
+                          (info) => info.filePath == file.path,
+                          orElse: () => FileInfo(filePath: file.path),
+                        );
 
-                      return isAndroid()
-                          ? GestureDetector(
-                              onLongPressStart: (LongPressStartDetails event) {
-                                isFileContextMenuShown = true;
-                                showMenu(
-                                  context: context,
-                                  position: RelativeRect.fromLTRB(
-                                      event.globalPosition.dx,
-                                      event.globalPosition.dy,
-                                      event.globalPosition.dx,
-                                      event.globalPosition.dy),
-                                  items: [
-                                    PopupMenuItem(
-                                      child: ListTile(
-                                        leading: Icon(Icons.copy),
-                                        title: Text('Copy'),
-                                        onTap: () {
-                                          Clipboard.setData(
-                                              ClipboardData(text: file.path));
-                                          Navigator.pop(context);
-                                        },
-                                      ),
-                                    ),
-                                    PopupMenuItem(
-                                      child: ListTile(
-                                        leading: Icon(Icons.edit),
-                                        title: Text('Rename'),
-                                        onTap: () async {
-                                          Navigator.pop(context);
-                                          TextEditingController
-                                              renameController =
-                                              TextEditingController(
-                                                  text: file
-                                                      .uri.pathSegments.last);
-                                          await showDialog(
-                                            context: context,
-                                            builder: (context) => AlertDialog(
-                                              title: Text('Rename File'),
-                                              content: TextField(
-                                                controller: renameController,
-                                              ),
-                                              actions: [
-                                                ElevatedButton(
-                                                  onPressed: () {
-                                                    Navigator.pop(context);
-                                                  },
-                                                  child: Text('Cancel'),
-                                                ),
-                                                ElevatedButton(
-                                                  onPressed: () {
-                                                    String newName =
-                                                        renameController.text;
-                                                    String newPath = p.join(
-                                                        p.dirname(file.path),
-                                                        newName);
-                                                    file.renameSync(newPath);
-                                                    Navigator.pop(context);
-                                                  },
-                                                  child: Text('Rename'),
-                                                ),
-                                              ],
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                    PopupMenuItem(
-                                      child: ListTile(
-                                        leading: Icon(Icons.delete),
-                                        title: Text('Delete'),
-                                        onTap: () {
-                                          file.deleteSync();
-                                          Navigator.pop(context);
-                                        },
-                                      ),
-                                    ),
-                                    PopupMenuItem(
-                                      child: Column(
-                                        children: [
-                                          ListTile(
-                                            leading: Icon(Icons.info),
-                                            title: Text('Properties'),
-                                            onTap: () {
-                                              Navigator.pop(context);
-                                              var fileStat = file.statSync();
-                                              var properties = fileStatToMap(
-                                                  fileStat, file.path);
-                                              showPropertiesDialog(
-                                                  context, properties);
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    PopupMenuItem(
-                                      child: GestureDetector(
-                                          onTap: () async {
-                                            FileInfo currentFileInfo =
-                                                fileInfoList.firstWhere(
-                                              (info) =>
-                                                  info.filePath == file.path,
-                                              orElse: () =>
-                                                  FileInfo(filePath: file.path),
-                                            );
-
-                                            currentFileInfo.tag = 'purple';
-
-                                            fileInfoList.removeWhere((info) =>
-                                                info.filePath == file.path);
-
-                                            fileInfoList.add(currentFileInfo);
-
-                                            await writeTagsToFile(
-                                                fileInfoList, tagsFilePath);
-
-                                            Navigator.pop(context);
-                                          },
-                                          child: Row(
-                                            children: [
-                                              getDotColor(Colors.purple),
-                                              SizedBox(width: 8),
-                                              Text("Creativity"),
-                                            ],
-                                          )),
-                                    ),
-                                    PopupMenuItem(
-                                      child: GestureDetector(
-                                          onTap: () async {
-                                            FileInfo currentFileInfo =
-                                                fileInfoList.firstWhere(
-                                              (info) =>
-                                                  info.filePath == file.path,
-                                              orElse: () =>
-                                                  FileInfo(filePath: file.path),
-                                            );
-
-                                            currentFileInfo.tag = 'green';
-
-                                            fileInfoList.removeWhere((info) =>
-                                                info.filePath == file.path);
-
-                                            fileInfoList.add(currentFileInfo);
-
-                                            await writeTagsToFile(
-                                                fileInfoList, tagsFilePath);
-
-                                            Navigator.pop(context);
-                                          },
-                                          child: Row(
-                                            children: [
-                                              getDotColor(Colors.green),
-                                              SizedBox(width: 8),
-                                              Text("Important"),
-                                            ],
-                                          )),
-                                    ),
-                                    PopupMenuItem(
-                                      child: GestureDetector(
-                                          onTap: () async {
-                                            FileInfo currentFileInfo =
-                                                fileInfoList.firstWhere(
-                                              (info) =>
-                                                  info.filePath == file.path,
-                                              orElse: () =>
-                                                  FileInfo(filePath: file.path),
-                                            );
-
-                                            currentFileInfo.tag = 'blue';
-
-                                            fileInfoList.removeWhere((info) =>
-                                                info.filePath == file.path);
-
-                                            fileInfoList.add(currentFileInfo);
-
-                                            await writeTagsToFile(
-                                                fileInfoList, tagsFilePath);
-
-                                            Navigator.pop(context);
-                                          },
-                                          child: Row(
-                                            children: [
-                                              getDotColor(Colors.blue),
-                                              SizedBox(width: 8),
-                                              Text("Development"),
-                                            ],
-                                          )),
-                                    ),
-                                  ],
-                                ).then(
-                                    (value) => isFileContextMenuShown = false);
-                              },
-                              child: Material(
+                        return isAndroid()
+                            ? Material(
                                 child: InkWell(
                                   onDoubleTap: () async {
                                     if (isDir) {
@@ -710,12 +519,24 @@ class _FyrFilesState extends State<FyrFiles> {
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
-                                            Icon(
-                                              isDir
-                                                  ? Icons.folder
-                                                  : Icons.file_copy,
-                                              size: 48.0,
-                                              color: Colors.deepPurple,
+                                            GestureDetector(
+                                              onLongPressStart:
+                                                  (LongPressStartDetails
+                                                      event) {
+                                                isFileContextMenuShown = true;
+                                                openIconContextMenu(
+                                                        context, event, file)
+                                                    .then((value) =>
+                                                        isFileContextMenuShown =
+                                                            false);
+                                              },
+                                              child: Icon(
+                                                isDir
+                                                    ? Icons.folder
+                                                    : Icons.file_copy,
+                                                size: 48.0,
+                                                color: Colors.deepPurple,
+                                              ),
                                             ),
                                             Text(
                                               isDir
@@ -727,514 +548,662 @@ class _FyrFilesState extends State<FyrFiles> {
                                             ),
                                           ],
                                         ),
-                                        if (currentFileInfo?.tag != null)
+                                        if (currentFileInfo.tag != null)
                                           Positioned(
                                               top: 24,
                                               left: 24,
                                               child: getDotByTag(
-                                                  currentFileInfo!.tag!)),
+                                                  currentFileInfo.tag!)),
                                       ]),
                                 ),
-                              ))
-                          : Listener(
-                              onPointerDown: (PointerDownEvent event) {
-                                if (event.kind == PointerDeviceKind.mouse &&
-                                    event.buttons == kSecondaryMouseButton) {
-                                  isFileContextMenuShown = true;
-                                  showMenu(
-                                    context: context,
-                                    position: RelativeRect.fromLTRB(
-                                        event.position.dx,
-                                        event.position.dy,
-                                        event.position.dx,
-                                        event.position.dy),
-                                    items: [
-                                      PopupMenuItem(
-                                        child: ListTile(
-                                          leading: Icon(Icons.copy),
-                                          title: Text('Copy'),
-                                          onTap: () {
-                                            Clipboard.setData(
-                                                ClipboardData(text: file.path));
-                                            Navigator.pop(context);
-                                          },
-                                        ),
-                                      ),
-                                      PopupMenuItem(
-                                        child: ListTile(
-                                          leading: Icon(Icons.edit),
-                                          title: Text('Rename'),
-                                          onTap: () async {
-                                            Navigator.pop(context);
-                                            TextEditingController
-                                                renameController =
-                                                TextEditingController(
-                                                    text: file
-                                                        .uri.pathSegments.last);
-                                            await showDialog(
-                                              context: context,
-                                              builder: (context) => AlertDialog(
-                                                title: Text('Rename File'),
-                                                content: TextField(
-                                                  controller: renameController,
-                                                ),
-                                                actions: [
-                                                  ElevatedButton(
-                                                    onPressed: () {
-                                                      Navigator.pop(context);
-                                                    },
-                                                    child: Text('Cancel'),
+                              )
+                            : Listener(
+                                behavior: HitTestBehavior.translucent,
+                                onPointerDown: (PointerDownEvent event) {
+                                  if (event.kind == PointerDeviceKind.mouse &&
+                                      event.buttons == kSecondaryMouseButton) {
+                                    isFileContextMenuShown = true;
+                                    openBodyContextMenuRightClick(
+                                            context, event, file)
+                                        .then((value) =>
+                                            isFileContextMenuShown = false);
+                                  }
+                                },
+                                child: Listener(
+                                    onPointerDown: (PointerDownEvent event) {
+                                      if (event.kind ==
+                                              PointerDeviceKind.mouse &&
+                                          event.buttons ==
+                                              kSecondaryMouseButton) {
+                                        isFileContextMenuShown = true;
+                                        openIconContextMenuRightClick(
+                                                context, event, file)
+                                            .then((value) =>
+                                                isFileContextMenuShown = false);
+                                      }
+                                    },
+                                    child: Material(
+                                      child: InkWell(
+                                        onDoubleTap: () async {
+                                          if (isDir) {
+                                            openDirectory(file as Directory);
+                                          } else {
+                                            var filePath = file.path;
+                                            var result = await Process.run(
+                                                'xdg-open', [filePath]);
+                                            if (result.exitCode != 0) {
+                                              print(
+                                                  'Could not open $filePath: ${result.stderr}');
+                                            }
+                                          }
+                                        },
+                                        child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    isDir
+                                                        ? Icons.folder
+                                                        : Icons.file_copy,
+                                                    size: 48.0,
+                                                    color: Colors.deepPurple,
                                                   ),
-                                                  ElevatedButton(
-                                                    onPressed: () {
-                                                      String newName =
-                                                          renameController.text;
-                                                      String newPath = p.join(
-                                                          p.dirname(file.path),
-                                                          newName);
-                                                      file.renameSync(newPath);
-                                                      Navigator.pop(context);
-                                                    },
-                                                    child: Text('Rename'),
+                                                  Text(
+                                                    isDir
+                                                        ? file.path
+                                                            .split('/')
+                                                            .last
+                                                        : file.uri.pathSegments
+                                                            .last,
+                                                    textAlign: TextAlign.center,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    maxLines: 1,
                                                   ),
                                                 ],
                                               ),
-                                            );
-                                          },
-                                        ),
+                                              if (currentFileInfo.tag != null)
+                                                Positioned(
+                                                    top: 24,
+                                                    left: 24,
+                                                    child: getDotByTag(
+                                                        currentFileInfo.tag!)),
+                                            ]),
                                       ),
-                                      PopupMenuItem(
-                                        child: ListTile(
-                                          leading: Icon(Icons.delete),
-                                          title: Text('Delete'),
-                                          onTap: () {
-                                            file.deleteSync();
-                                            Navigator.pop(context);
-                                          },
-                                        ),
-                                      ),
-                                      PopupMenuItem(
-                                        child: Column(
-                                          children: [
-                                            ListTile(
-                                              leading: Icon(Icons.info),
-                                              title: Text('Properties'),
-                                              onTap: () {
-                                                Navigator.pop(context);
-                                                var fileStat = file.statSync();
-                                                var properties = fileStatToMap(
-                                                    fileStat, file.path);
-                                                showPropertiesDialog(
-                                                    context, properties);
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      PopupMenuItem(
-                                        child: GestureDetector(
-                                            onTap: () async {
-                                              FileInfo currentFileInfo =
-                                                  fileInfoList.firstWhere(
-                                                (info) =>
-                                                    info.filePath == file.path,
-                                                orElse: () => FileInfo(
-                                                    filePath: file.path),
-                                              );
-
-                                              currentFileInfo.tag = 'purple';
-
-                                              fileInfoList.removeWhere((info) =>
-                                                  info.filePath == file.path);
-
-                                              fileInfoList.add(currentFileInfo);
-
-                                              await writeTagsToFile(
-                                                  fileInfoList, tagsFilePath);
-
-                                              Navigator.pop(context);
-                                            },
-                                            child: Row(
-                                              children: [
-                                                getDotColor(Colors.purple),
-                                                SizedBox(width: 8),
-                                                Text("Creativity"),
-                                              ],
-                                            )),
-                                      ),
-                                      PopupMenuItem(
-                                        child: GestureDetector(
-                                            onTap: () async {
-                                              FileInfo currentFileInfo =
-                                                  fileInfoList.firstWhere(
-                                                (info) =>
-                                                    info.filePath == file.path,
-                                                orElse: () => FileInfo(
-                                                    filePath: file.path),
-                                              );
-
-                                              currentFileInfo.tag = 'green';
-
-                                              fileInfoList.removeWhere((info) =>
-                                                  info.filePath == file.path);
-
-                                              fileInfoList.add(currentFileInfo);
-
-                                              await writeTagsToFile(
-                                                  fileInfoList, tagsFilePath);
-
-                                              Navigator.pop(context);
-                                            },
-                                            child: Row(
-                                              children: [
-                                                getDotColor(Colors.green),
-                                                SizedBox(width: 8),
-                                                Text("Important"),
-                                              ],
-                                            )),
-                                      ),
-                                      PopupMenuItem(
-                                        child: GestureDetector(
-                                            onTap: () async {
-                                              FileInfo currentFileInfo =
-                                                  fileInfoList.firstWhere(
-                                                (info) =>
-                                                    info.filePath == file.path,
-                                                orElse: () => FileInfo(
-                                                    filePath: file.path),
-                                              );
-
-                                              currentFileInfo.tag = 'blue';
-
-                                              fileInfoList.removeWhere((info) =>
-                                                  info.filePath == file.path);
-
-                                              fileInfoList.add(currentFileInfo);
-
-                                              await writeTagsToFile(
-                                                  fileInfoList, tagsFilePath);
-
-                                              Navigator.pop(context);
-                                            },
-                                            child: Row(
-                                              children: [
-                                                getDotColor(Colors.blue),
-                                                SizedBox(width: 8),
-                                                Text("Development"),
-                                              ],
-                                            )),
-                                      ),
-                                    ],
-                                  ).then((value) =>
-                                      isFileContextMenuShown = false);
-                                }
-                              },
-                              child: Material(
-                                child: InkWell(
-                                  onDoubleTap: () async {
-                                    if (isDir) {
-                                      openDirectory(file as Directory);
-                                    } else {
-                                      var filePath = file.path;
-                                      var result = await Process.run(
-                                          'xdg-open', [filePath]);
-                                      if (result.exitCode != 0) {
-                                        print(
-                                            'Could not open $filePath: ${result.stderr}');
-                                      }
-                                    }
-                                  },
-                                  child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              isDir
-                                                  ? Icons.folder
-                                                  : Icons.file_copy,
-                                              size: 48.0,
-                                              color: Colors.deepPurple,
-                                            ),
-                                            Text(
-                                              isDir
-                                                  ? file.path.split('/').last
-                                                  : file.uri.pathSegments.last,
-                                              textAlign: TextAlign.center,
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 1,
-                                            ),
-                                          ],
-                                        ),
-                                        if (currentFileInfo?.tag != null)
-                                          Positioned(
-                                              top: 24,
-                                              left: 24,
-                                              child: getDotByTag(
-                                                  currentFileInfo!.tag!)),
-                                      ]),
-                                ),
-                              ));
-                    },
-                  ),
-                  GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onSecondaryTapDown: (TapDownDetails details) async {
-                      if (!isFileContextMenuShown) {
-                        showMenu(
-                          context: context,
-                          position: RelativeRect.fromLTRB(
-                            details.globalPosition.dx,
-                            details.globalPosition.dy,
-                            details.globalPosition.dx,
-                            details.globalPosition.dy,
-                          ),
-                          items: [
-                            PopupMenuItem(
-                              child: ListTile(
-                                leading: Icon(Icons.create),
-                                title: Text('Create File'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) {
-                                      TextEditingController fileNameController =
-                                          TextEditingController();
-                                      return AlertDialog(
-                                        title: Text('Enter File Name'),
-                                        content: TextField(
-                                          controller: fileNameController,
-                                          decoration: InputDecoration(
-                                              hintText: "File name"),
-                                        ),
-                                        actions: <Widget>[
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context),
-                                            child: Text('Cancel'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () async {
-                                              if (fileNameController
-                                                  .text.isNotEmpty) {
-                                                await createFile(currentDir,
-                                                    fileNameController.text);
-                                                Navigator.pop(context);
-                                              }
-                                            },
-                                            child: Text('Create'),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                            PopupMenuItem(
-                              child: ListTile(
-                                leading: Icon(Icons.create),
-                                title: Text('Create Directory'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) {
-                                      TextEditingController dirNameController =
-                                          TextEditingController();
-                                      return AlertDialog(
-                                        title: Text('Enter Directory Name'),
-                                        content: TextField(
-                                          controller: dirNameController,
-                                          decoration: InputDecoration(
-                                              hintText: "Directory name"),
-                                        ),
-                                        actions: <Widget>[
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context),
-                                            child: Text('Cancel'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () async {
-                                              if (dirNameController
-                                                  .text.isNotEmpty) {
-                                                await createDir(currentDir,
-                                                    dirNameController.text);
-                                                Navigator.pop(context);
-                                              }
-                                            },
-                                            child: Text('Create'),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                            PopupMenuItem(
-                              enabled: await isClipboardDataAvailable(),
-                              child: ListTile(
-                                leading: Icon(Icons.paste),
-                                title: Text('Paste'),
-                                onTap: () async {
-                                  await pasteFile(currentDir);
-                                  Navigator.pop(context);
-                                },
-                              ),
-                            ),
-                            PopupMenuItem(
-                              child: ListTile(
-                                leading: Icon(Icons.info),
-                                title: Text('Properties'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  var dirStat = currentDir.statSync();
-                                  var properties =
-                                      dirStatToMap(dirStat, currentDir.path);
-                                  showPropertiesDialog(context, properties);
-                                },
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-                    },
-                    onLongPressStart: (LongPressStartDetails details) async {
-                      if (!isFileContextMenuShown) {
-                        showMenu(
-                          context: context,
-                          position: RelativeRect.fromLTRB(
-                            details.globalPosition.dx,
-                            details.globalPosition.dy,
-                            details.globalPosition.dx,
-                            details.globalPosition.dy,
-                          ),
-                          items: [
-                            PopupMenuItem(
-                              child: ListTile(
-                                leading: Icon(Icons.create),
-                                title: Text('Create File'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) {
-                                      TextEditingController fileNameController =
-                                          TextEditingController();
-                                      return AlertDialog(
-                                        title: Text('Enter File Name'),
-                                        content: TextField(
-                                          controller: fileNameController,
-                                          decoration: InputDecoration(
-                                              hintText: "File name"),
-                                        ),
-                                        actions: <Widget>[
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context),
-                                            child: Text('Cancel'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () async {
-                                              if (fileNameController
-                                                  .text.isNotEmpty) {
-                                                await createFile(currentDir,
-                                                    fileNameController.text);
-                                                Navigator.pop(context);
-                                              }
-                                            },
-                                            child: Text('Create'),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                            PopupMenuItem(
-                              child: ListTile(
-                                leading: Icon(Icons.create),
-                                title: Text('Create Directory'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  showDialog(
-                                    context: context,
-                                    builder: (context) {
-                                      TextEditingController dirNameController =
-                                          TextEditingController();
-                                      return AlertDialog(
-                                        title: Text('Enter Directory Name'),
-                                        content: TextField(
-                                          controller: dirNameController,
-                                          decoration: InputDecoration(
-                                              hintText: "Directory name"),
-                                        ),
-                                        actions: <Widget>[
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context),
-                                            child: Text('Cancel'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () async {
-                                              if (dirNameController
-                                                  .text.isNotEmpty) {
-                                                await createDir(currentDir,
-                                                    dirNameController.text);
-                                                Navigator.pop(context);
-                                              }
-                                            },
-                                            child: Text('Create'),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                            PopupMenuItem(
-                              enabled: await isClipboardDataAvailable(),
-                              child: ListTile(
-                                leading: Icon(Icons.paste),
-                                title: Text('Paste'),
-                                onTap: () async {
-                                  await pasteFile(currentDir);
-                                  Navigator.pop(context);
-                                },
-                              ),
-                            ),
-                            PopupMenuItem(
-                              child: ListTile(
-                                leading: Icon(Icons.info),
-                                title: Text('Properties'),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  var dirStat = currentDir.statSync();
-                                  var properties =
-                                      dirStatToMap(dirStat, currentDir.path);
-                                  showPropertiesDialog(context, properties);
-                                },
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-                    },
-                  ),
-                ],
+                                    )),
+                              );
+                      },
+                    ),
+                  ],
+                ),
               );
             }
             return const CircularProgressIndicator();
           },
         ),
       ),
+    );
+  }
+
+  Future<dynamic> openIconContextMenuRightClick(
+      BuildContext context, PointerDownEvent event, FileSystemEntity file) {
+    return showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(event.position.dx, event.position.dy,
+          event.position.dx, event.position.dy),
+      items: [
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.copy),
+            title: const Text('Copy'),
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: file.path));
+              Navigator.pop(context);
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.edit),
+            title: const Text('Rename'),
+            onTap: () async {
+              Navigator.pop(context);
+              TextEditingController renameController =
+                  TextEditingController(text: file.uri.pathSegments.last);
+              await showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Rename File'),
+                  content: TextField(
+                    controller: renameController,
+                  ),
+                  actions: [
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        String newName = renameController.text;
+                        String newPath = p.join(p.dirname(file.path), newName);
+                        file.renameSync(newPath);
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Rename'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.delete),
+            title: const Text('Delete'),
+            onTap: () {
+              file.deleteSync();
+              Navigator.pop(context);
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.info),
+                title: const Text('Properties'),
+                onTap: () {
+                  Navigator.pop(context);
+                  var fileStat = file.statSync();
+                  var properties = fileStatToMap(fileStat, file.path);
+                  showPropertiesDialog(context, properties);
+                },
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          child: GestureDetector(
+              onTap: () async {
+                FileInfo currentFileInfo = fileInfoList.firstWhere(
+                  (info) => info.filePath == file.path,
+                  orElse: () => FileInfo(filePath: file.path),
+                );
+
+                currentFileInfo.tag = 'purple';
+
+                fileInfoList.removeWhere((info) => info.filePath == file.path);
+
+                fileInfoList.add(currentFileInfo);
+
+                await writeTagsToFile(fileInfoList, tagsFilePath);
+
+                Navigator.pop(context);
+              },
+              child: Row(
+                children: [
+                  getDotColor(Colors.purple),
+                  const SizedBox(width: 8),
+                  const Text("Creativity"),
+                ],
+              )),
+        ),
+        PopupMenuItem(
+          child: GestureDetector(
+              onTap: () async {
+                FileInfo currentFileInfo = fileInfoList.firstWhere(
+                  (info) => info.filePath == file.path,
+                  orElse: () => FileInfo(filePath: file.path),
+                );
+
+                currentFileInfo.tag = 'green';
+
+                fileInfoList.removeWhere((info) => info.filePath == file.path);
+
+                fileInfoList.add(currentFileInfo);
+
+                await writeTagsToFile(fileInfoList, tagsFilePath);
+
+                Navigator.pop(context);
+              },
+              child: Row(
+                children: [
+                  getDotColor(Colors.green),
+                  const SizedBox(width: 8),
+                  const Text("Important"),
+                ],
+              )),
+        ),
+        PopupMenuItem(
+          child: GestureDetector(
+              onTap: () async {
+                FileInfo currentFileInfo = fileInfoList.firstWhere(
+                  (info) => info.filePath == file.path,
+                  orElse: () => FileInfo(filePath: file.path),
+                );
+
+                currentFileInfo.tag = 'blue';
+
+                fileInfoList.removeWhere((info) => info.filePath == file.path);
+
+                fileInfoList.add(currentFileInfo);
+
+                await writeTagsToFile(fileInfoList, tagsFilePath);
+
+                Navigator.pop(context);
+              },
+              child: Row(
+                children: [
+                  getDotColor(Colors.blue),
+                  const SizedBox(width: 8),
+                  const Text("Development"),
+                ],
+              )),
+        ),
+      ],
+    );
+  }
+
+  openBodyContextMenuRightClick(BuildContext context, PointerDownEvent event,
+      FileSystemEntity file) async {
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        event.position.dx,
+        event.position.dy,
+        event.position.dx,
+        event.position.dy,
+      ),
+      items: [
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.create),
+            title: const Text('Create File'),
+            onTap: () {
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (context) {
+                  TextEditingController fileNameController =
+                      TextEditingController();
+                  return AlertDialog(
+                    title: const Text('Enter File Name'),
+                    content: TextField(
+                      controller: fileNameController,
+                      decoration: const InputDecoration(hintText: "File name"),
+                    ),
+                    actions: <Widget>[
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          if (fileNameController.text.isNotEmpty) {
+                            await createFile(
+                                currentDir, fileNameController.text);
+                            Navigator.pop(context);
+                          }
+                        },
+                        child: const Text('Create'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.create),
+            title: const Text('Create Directory'),
+            onTap: () {
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (context) {
+                  TextEditingController dirNameController =
+                      TextEditingController();
+                  return AlertDialog(
+                    title: const Text('Enter Directory Name'),
+                    content: TextField(
+                      controller: dirNameController,
+                      decoration:
+                          const InputDecoration(hintText: "Directory name"),
+                    ),
+                    actions: <Widget>[
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          if (dirNameController.text.isNotEmpty) {
+                            await createDir(currentDir, dirNameController.text);
+                            Navigator.pop(context);
+                          }
+                        },
+                        child: const Text('Create'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        PopupMenuItem(
+          enabled: await isClipboardDataAvailable(),
+          child: ListTile(
+            leading: const Icon(Icons.paste),
+            title: const Text('Paste'),
+            onTap: () async {
+              await pasteFile(currentDir);
+              Navigator.pop(context);
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.info),
+            title: const Text('Properties'),
+            onTap: () {
+              Navigator.pop(context);
+              var dirStat = currentDir.statSync();
+              var properties = dirStatToMap(dirStat, currentDir.path);
+              showPropertiesDialog(context, properties);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  openBodyContextMenu(
+      BuildContext context, LongPressStartDetails details) async {
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        details.globalPosition.dx,
+        details.globalPosition.dy,
+        details.globalPosition.dx,
+        details.globalPosition.dy,
+      ),
+      items: [
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.create),
+            title: const Text('Create File'),
+            onTap: () {
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (context) {
+                  TextEditingController fileNameController =
+                      TextEditingController();
+                  return AlertDialog(
+                    title: const Text('Enter File Name'),
+                    content: TextField(
+                      controller: fileNameController,
+                      decoration: const InputDecoration(hintText: "File name"),
+                    ),
+                    actions: <Widget>[
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          if (fileNameController.text.isNotEmpty) {
+                            await createFile(
+                                currentDir, fileNameController.text);
+                            Navigator.pop(context);
+                          }
+                        },
+                        child: const Text('Create'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.create),
+            title: const Text('Create Directory'),
+            onTap: () {
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (context) {
+                  TextEditingController dirNameController =
+                      TextEditingController();
+                  return AlertDialog(
+                    title: const Text('Enter Directory Name'),
+                    content: TextField(
+                      controller: dirNameController,
+                      decoration:
+                          const InputDecoration(hintText: "Directory name"),
+                    ),
+                    actions: <Widget>[
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          if (dirNameController.text.isNotEmpty) {
+                            await createDir(currentDir, dirNameController.text);
+                            Navigator.pop(context);
+                          }
+                        },
+                        child: const Text('Create'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        PopupMenuItem(
+          enabled: await isClipboardDataAvailable(),
+          child: ListTile(
+            leading: const Icon(Icons.paste),
+            title: const Text('Paste'),
+            onTap: () async {
+              await pasteFile(currentDir);
+              Navigator.pop(context);
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.info),
+            title: const Text('Properties'),
+            onTap: () {
+              Navigator.pop(context);
+              var dirStat = currentDir.statSync();
+              var properties = dirStatToMap(dirStat, currentDir.path);
+              showPropertiesDialog(context, properties);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<dynamic> openIconContextMenu(BuildContext context,
+      LongPressStartDetails event, FileSystemEntity file) {
+    return showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          event.globalPosition.dx,
+          event.globalPosition.dy,
+          event.globalPosition.dx,
+          event.globalPosition.dy),
+      items: [
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.copy),
+            title: const Text('Copy'),
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: file.path));
+              Navigator.pop(context);
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.edit),
+            title: const Text('Rename'),
+            onTap: () async {
+              Navigator.pop(context);
+              TextEditingController renameController =
+                  TextEditingController(text: file.uri.pathSegments.last);
+              await showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Rename File'),
+                  content: TextField(
+                    controller: renameController,
+                  ),
+                  actions: [
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        String newName = renameController.text;
+                        String newPath = p.join(p.dirname(file.path), newName);
+                        file.renameSync(newPath);
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Rename'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: ListTile(
+            leading: const Icon(Icons.delete),
+            title: const Text('Delete'),
+            onTap: () {
+              file.deleteSync();
+              Navigator.pop(context);
+            },
+          ),
+        ),
+        PopupMenuItem(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.info),
+                title: const Text('Properties'),
+                onTap: () {
+                  Navigator.pop(context);
+                  var fileStat = file.statSync();
+                  var properties = fileStatToMap(fileStat, file.path);
+                  showPropertiesDialog(context, properties);
+                },
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          child: GestureDetector(
+              onTap: () async {
+                FileInfo currentFileInfo = fileInfoList.firstWhere(
+                  (info) => info.filePath == file.path,
+                  orElse: () => FileInfo(filePath: file.path),
+                );
+
+                currentFileInfo.tag = 'purple';
+
+                fileInfoList.removeWhere((info) => info.filePath == file.path);
+
+                fileInfoList.add(currentFileInfo);
+
+                await writeTagsToFile(fileInfoList, tagsFilePath);
+
+                Navigator.pop(context);
+              },
+              child: Row(
+                children: [
+                  getDotColor(Colors.purple),
+                  const SizedBox(width: 8),
+                  const Text("Creativity"),
+                ],
+              )),
+        ),
+        PopupMenuItem(
+          child: GestureDetector(
+              onTap: () async {
+                FileInfo currentFileInfo = fileInfoList.firstWhere(
+                  (info) => info.filePath == file.path,
+                  orElse: () => FileInfo(filePath: file.path),
+                );
+
+                currentFileInfo.tag = 'green';
+
+                fileInfoList.removeWhere((info) => info.filePath == file.path);
+
+                fileInfoList.add(currentFileInfo);
+
+                await writeTagsToFile(fileInfoList, tagsFilePath);
+
+                Navigator.pop(context);
+              },
+              child: Row(
+                children: [
+                  getDotColor(Colors.green),
+                  const SizedBox(width: 8),
+                  const Text("Important"),
+                ],
+              )),
+        ),
+        PopupMenuItem(
+          child: GestureDetector(
+              onTap: () async {
+                FileInfo currentFileInfo = fileInfoList.firstWhere(
+                  (info) => info.filePath == file.path,
+                  orElse: () => FileInfo(filePath: file.path),
+                );
+
+                currentFileInfo.tag = 'blue';
+
+                fileInfoList.removeWhere((info) => info.filePath == file.path);
+
+                fileInfoList.add(currentFileInfo);
+
+                await writeTagsToFile(fileInfoList, tagsFilePath);
+
+                Navigator.pop(context);
+              },
+              child: Row(
+                children: [
+                  getDotColor(Colors.blue),
+                  const SizedBox(width: 8),
+                  const Text("Development"),
+                ],
+              )),
+        ),
+      ],
     );
   }
 }
