@@ -15,6 +15,19 @@ void main() {
   runApp(const FyrFilesApp());
 }
 
+class PermissionsService {
+  static const MethodChannel _channel = MethodChannel('com.example.fyr_files/permissions');
+
+  static Future<bool> checkAllFilesAccessPermission() async {
+    final bool hasPermission = await _channel.invokeMethod('checkAllFilesAccessPermission');
+    return hasPermission;
+  }
+
+  static Future<void> requestAllFilesAccessPermission() async {
+    await _channel.invokeMethod('requestAllFilesAccessPermission');
+  }
+}
+
 Widget getDotColor(Color color) {
   return Container(
     width: 10,
@@ -66,6 +79,7 @@ class FyrFilesApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+
     return MaterialApp(
       theme: ThemeData(
         brightness: Brightness.light,
@@ -94,6 +108,15 @@ class _FyrFilesState extends State<FyrFiles> {
   List<FileInfo> fileInfoList = [];
   late String tagsFilePath;
   String? selectedTag;
+  String displayedText = "";
+
+  Future<void> manageStoragePermission() async {
+    bool hasPermission = await PermissionsService.checkAllFilesAccessPermission();
+    if (!hasPermission) {
+      // This will open the settings to allow the user to grant the permission
+      await PermissionsService.requestAllFilesAccessPermission();
+    }
+  }
 
   Stream<List<FileSystemEntity>> watchDirectory() async* {
     List<FileSystemEntity> previousFiles = [];
@@ -129,9 +152,9 @@ class _FyrFilesState extends State<FyrFiles> {
     return Platform.isAndroid;
   }
 
-  Future<Directory> getHomeDirectoryByPlatform() async {
+  Future<Directory?> getHomeDirectoryByPlatform() async {
     if (isAndroid()) {
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = Directory('/storage/emulated/0');
       return directory;
     } else {
       return Directory(Platform.environment['HOME'] ?? '/home/');
@@ -142,26 +165,30 @@ class _FyrFilesState extends State<FyrFiles> {
   void initState() {
     super.initState();
 
-    getHomeDirectoryByPlatform().then((Directory dir) async {
-      setState(() {
-        currentDir = dir;
-        tagsFilePath = p.join(currentDir.path, '.fyr/files/tags.json');
-      });
+    manageStoragePermission().then((granted){
+      getHomeDirectoryByPlatform().then((Directory? dir) async {
+        Directory homeDir = dir ?? await getApplicationSupportDirectory();
+        Directory logDir = await getApplicationSupportDirectory();
+        setState(() {
+          currentDir = homeDir;
+          tagsFilePath = p.join(Platform.isAndroid ? logDir.path : currentDir.path , '.fyr/files/tags.json');
+        });
 
-      try {
-        await checkAndCreateFile();
-        final loadedFileInfo = await readTagsFromFile(tagsFilePath);
-        setState(() {
-          fileInfoList = loadedFileInfo;
-          files = currentDir.listSync();
-        });
-      } catch (err) {
-        print(err);
-        setState(() {
-          fileInfoList = [];
-          files = currentDir.listSync();
-        });
-      }
+        try {
+          await checkAndCreateFile();
+          final loadedFileInfo = await readTagsFromFile(tagsFilePath);
+          setState(() {
+            fileInfoList = loadedFileInfo;
+            files = currentDir.listSync();
+          });
+        } catch (err) {
+          print(err);
+          setState(() {
+            fileInfoList = [];
+            files = currentDir.listSync();
+          });
+        }
+      });
     });
   }
 
@@ -171,15 +198,26 @@ class _FyrFilesState extends State<FyrFiles> {
       return '';
     }
 
-    if (dir.path == '/' && dir != currentDir) {
-      return 'root > ';
-    } else if (dir.path == '/' && dir == currentDir) {
-      return 'root';
-    } else if (dir != currentDir) {
-      return '${dir.path.split('/').last} > ';
-    } else {
-      return dir.path.split('/').last;
+
+    if (Platform.isAndroid && dir.path == '/storage/emulated/0' && currentDir != dir) {
+      return '~ > ${currentDir.path.split('/storage/emulated/0/')[1].replaceAll('/', ' > ')}';
+    } else if (Platform.isAndroid && dir.path == '/storage/emulated/0' && dir == currentDir) {
+      return '~';
     }
+
+    if (Platform.isLinux) {
+      if (dir.path == '/' && dir != currentDir) {
+        return 'root > ';
+      } else if (dir.path == '/' && dir == currentDir) {
+        return 'root';
+      } else if (dir != currentDir) {
+        return '${dir.path.split('/').last} > ';
+      } else {
+        return dir.path.split('/').last;
+      }
+
+    }
+    return '';
   }
 
   double getToolbarPadding() {

@@ -1,10 +1,16 @@
-# fyrFiles
+# fyr_files
 
-![fyrFiles screenshot](./screenshot.png)
+A new Flutter project.
 
+## Getting Started
 
-fyrFiles is a Linux/Android file manager written with Flutter/Dart. It is minimal but has the traditional functionality of copy/paste, creating new directories/files, viewing properties, and the ability to view hidden files by hitting Ctrl+H.
+This project is a starting point for a Flutter application.
 
-The biggest feature of fyrFiles is its ability to tag files and filter to view all of your tagged files at once, making it easy to find the files you need when you need them the most. Tags are saved in the ~/.fyr directory under files/tags.json and can easily be moved between devices by simply copying that directory over.
+A few resources to get you started if this is your first Flutter project:
 
+- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
